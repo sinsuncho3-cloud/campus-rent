@@ -1,0 +1,92 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><title>CampusRent browser checks</title>
+<body><pre id="result">RUNNING</pre><iframe id="app" style="width:1200px;height:900px;border:0"></iframe>
+<script>window.addEventListener('error',e=>document.querySelector('#result').textContent='ERROR '+e.message);window.addEventListener('unhandledrejection',e=>document.querySelector('#result').textContent='ERROR '+e.reason);</script>
+<script type="module">
+import {resources,initialConditions,availability,analyzeInput,recommend,alternateSlots,alternateResources,conditionErrors} from '/js/data.js';
+import {readState,submitItems,transition,authenticate} from '/js/store.js';
+const result=document.querySelector('#result'),frame=document.querySelector('#app');
+const outcomes=[];
+function check(condition,label){if(!condition)throw new Error(label);outcomes.push('PASS '+label);result.textContent='RUNNING\n'+outcomes.join('\n');}
+async function rejects(task,label){let failed=false;try{await task();}catch{failed=true;}check(failed,label);}
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function until(fn,label){for(let i=0;i<100;i++){if(fn())return;await sleep(50);}throw new Error('Timed out: '+label);}
+async function load(path){frame.src=path;await new Promise(resolve=>frame.onload=resolve);await until(()=>frame.contentDocument.querySelector('#main')?.children.length,'page render');await frame.contentDocument.fonts.ready;}
+const doc=()=>frame.contentDocument;
+const click=selector=>{const element=doc().querySelector(selector);if(!element)throw new Error('Missing '+selector);element.click();};
+const fill=(selector,value)=>{const element=doc().querySelector(selector);element.value=value;element.dispatchEvent(new Event('input',{bubbles:true}));};
+try{
+  check(resources.length===12,'12 source resources');
+  const c={...initialConditions,use:'팀 회의',people:6};
+  check(availability(resources.find(r=>r.id==='room01'),c).some(e=>e.includes('수용')),'facility capacity');
+  check(availability(resources.find(r=>r.id==='mic03'),c).some(e=>e.includes('점검')),'maintenance blocks selection');
+  check(conditionErrors({...c,end:c.start}).length>0,'invalid date range');
+  check(analyzeInput('학생회 회의 6명').people===6,'participant extraction');
+  check(analyzeInput('회의 4~6명').peopleStatus==='ambiguous','ambiguous participant range');
+  const recommendations=recommend('팀 회의',analyzeInput('학생회 회의 6명'),6,c);
+  check(recommendations.length>0&&recommendations.every(i=>i.resource.capacity>=6),'recommendation capacity filtering');
+  check(alternateResources(resources.find(r=>r.id==='mic01'),c).some(r=>r.id==='mic02'),'available equipment alternative');
+  check(alternateSlots(resources[0],c,c.start.slice(0,10),c.start.slice(0,10)).length>0,'alternate time slots');
+  const student=await authenticate({email:'demo@campusrent.example',password:'Campus123!'});
+  const other=await authenticate({email:'other@campusrent.example',password:'Campus123!'});
+  const admin=await authenticate({email:'admin@campusrent.example',password:'CampusAdmin123!'});
+  await rejects(()=>authenticate({email:student.email,password:'incorrect'}),'invalid password');
+  const item={resourceId:'cam02',condition:{...c}};
+  const [id]=await submitItems([item],student);
+  await rejects(()=>transition(id,'취소',other,1),'student ownership');
+  await rejects(()=>transition(id,'승인',student,1),'administrator role');
+  const [second]=await submitItems([item],other);
+  const approvals=await Promise.allSettled([transition(id,'승인',admin,1),transition(second,'승인',admin,1)]);
+  check(approvals.filter(r=>r.status==='fulfilled').length===1,'concurrent approvals prevent double booking');
+  const winning=approvals[0].status==='fulfilled'?id:second;
+  await rejects(()=>transition(winning,'출고',admin,1,{confirmed:true}),'stale version');
+  await transition(winning,'출고',admin,2,{confirmed:true});
+  const owner=winning===id?student:other;
+  await transition(winning,'반납 요청',owner,3);
+  await rejects(()=>transition(winning,'반납 완료',admin,4,{quantities:{}}),'incomplete component return');
+  const parts=resources.find(r=>r.id==='cam02').components;
+  const quantities=Object.fromEntries(parts.map(p=>[p.name,p.quantity]));
+  await transition(winning,'반납 완료',admin,4,{quantities});
+  check((await readState()).records.find(r=>r.id===winning).status==='반납 완료','checkout and return lifecycle');
+  await load('/');
+  check(doc().querySelector('h1').textContent.includes('하고 싶은 활동'),'home renders');
+  check(doc().querySelectorAll('.activity').length===3,'source activity cards');
+  await Promise.all([...doc().images].map(img=>img.complete?Promise.resolve():new Promise(resolve=>{img.onload=resolve;img.onerror=resolve;})));
+  check([...doc().images].every(img=>img.complete&&img.naturalWidth>0),'home assets load');
+  click('[data-keyword="인터뷰 촬영"]');
+  check(doc().querySelector('#activity').value==='인터뷰 촬영','keyword fills activity');
+  doc().querySelector('[data-form="home"]').requestSubmit();
+  await until(()=>doc().querySelector('[data-form="purpose"]'),'purpose navigation');
+  check(doc().querySelector('textarea').value==='인터뷰 촬영','activity carried to recommendation');
+  await load('/equipment');
+  doc().querySelector('[data-form="conditions"]').requestSubmit();
+  await until(()=>doc().querySelector('[data-action="add"]:not(:disabled)'),'conditions apply');
+  click('[data-action="add"][data-id="cam02"]');
+  await until(()=>doc().querySelectorAll('.cart-item').length===1,'cart selection');
+  click('[data-action="checkout"]');
+  await until(()=>doc().querySelector('[data-form="auth"]'),'login before submission');
+  fill('[name="email"]','demo@campusrent.example');fill('[name="password"]','Campus123!');
+  doc().querySelector('[data-form="auth"]').requestSubmit();
+  await until(()=>!doc().querySelector('#modal').open,'login completes');
+  check(doc().querySelector('.user-name').textContent.includes('시연'),'student login in UI');
+  click('[data-action="checkout"]');
+  await until(()=>doc().querySelector('[data-form="checkout"]'),'explicit final confirmation');
+  doc().querySelector('[name="agree"]').checked=true;
+  doc().querySelector('[data-form="checkout"]').requestSubmit();
+  await until(()=>doc().querySelector('h1').textContent==='내 신청 현황','submission navigates to records');
+  check(doc().querySelectorAll('.record').length>0,'submitted record displayed');
+  await load('/equipment?q=not-a-real-resource');
+  check(doc().querySelector('.cards').textContent.includes('검색 결과가 없습니다'),'empty search state');
+  await load('/facilities');
+  check(doc().querySelectorAll('.resource').length===5,'facility screen');
+  await load('/admin');check(doc().querySelector('h3').textContent.includes('관리자 계정'),'admin login gate');
+  for(const width of [1200,390]){
+    frame.style.width=width+'px';
+    for(const path of ['/','/equipment','/facilities','/purpose?activity='+encodeURIComponent('학생회 회의 6명')]){
+      await load(path);await sleep(100);
+      check(doc().documentElement.scrollWidth<=width,`${width}px no horizontal overflow ${path}`);
+    }
+  }
+  result.textContent=`PASS ${outcomes.length} checks\n`+outcomes.join('\n');
+  document.documentElement.dataset.result='pass';
+}catch(error){result.textContent='FAIL '+error.stack+'\n'+outcomes.join('\n');document.documentElement.dataset.result='fail';}
+</script></body></html>

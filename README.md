@@ -64,24 +64,27 @@ CampusRent는 학생이 필요한 교내 시설·장비를 **직접 검색**하�
 
 | 산출물 | 내용 | 저장 위치(예시) |
 | --- | --- | --- |
-| 프로젝트 계획서 | 목적·범위·기능·역할·일정 | [`PROJECT.md`](PROJECT.md) |
+| 프로젝트 계획서 | 목적·범위·기능·역할·일정 | [`New-Era_PROJECT.md`](docs/New-Era_PROJECT.md) |
 | Use Case | 사용자별 기능과 시스템 요구사항 | `docs/usecase/` |
 | 논리·물리 ERD | 데이터 구조 및 관계 | `docs/erd/` |
 | 화면설계 | 화면 흐름 및 UI 설계 자료 | `docs/ui/` |
-| Figma Make | 화면 프로토타입 | 팀 공유 링크 추가 |
+| Figma Make | 화면 프로토타입·구현 안내 | [`화면 구현 안내`](docs/ui/README.md) |
 
 ## 7. 프로젝트 폴더 구조 예시
 
 ```text
-hnu-information-project/
+campus-rent/
 ├── README.md
-├── PROJECT.md
+├── preview.cmd       # JDK 기반 로컬 화면 미리보기
 ├── .gitignore
 ├── docs/
 │   ├── usecase/
 │   ├── erd/
 │   └── ui/
-└── src/               # 구현 소스코드 (개발 단계에서 구성)
+├── src/main/resources/
+│   ├── templates/index.html
+│   └── static/        # CSS·JavaScript·원본 SVG·폰트
+└── tools/             # 미리보기 서버·Chrome 자동 검증
 ```
 
 > 이 폴더 구조는 수업용 예시입니다. 팀별 산출물과 확정된 기술 스택에 맞춰 수정하며, 실제 파일 업로드 후 문서 링크를 연결합니다.
@@ -99,10 +102,32 @@ hnu-information-project/
 
 ## 9. 개발 준비 및 협업
 
-1. `PROJECT.md`, Use Case, ERD, Figma Make 자료를 저장소에 정리합니다.
+1. `docs/New-Era_PROJECT.md`, Use Case, ERD, Figma Make 자료를 저장소에 정리합니다.
 2. 팀별 개발 도구와 역할 분담을 협의하고 README를 갱신합니다.
 3. 팀원들이 저장소를 Clone하여 동일한 분석·설계 문서를 공유합니다.
 4. 기능 구현 시 Use Case·ERD·화면설계의 명칭과 범위를 일치시킵니다.
 5. 구현·검증 결과에 따라 문서와 소스코드를 함께 업데이트합니다.
 
 **주의:** 화면 시연 구현과 최종 서버·DB 연동 완료는 구분합니다. 이 README의 기능 목록은 프로젝트 목표를 포함하며 전체 기능 구현 완료를 의미하지 않습니다.
+
+## 10. 화면 구현 및 실행
+
+제공된 Figma Make ZIP을 바탕으로 홈, 장비·시설 검색, 목적별 추천, 선택 목록, 로그인·회원가입, 학생 신청 현황·과거 내역, 관리자 승인·출고·반납·시설 이용 화면을 HTML·CSS·JavaScript로 구현했습니다. 정적 자원은 Spring Boot의 기본 경로에 배치하고 HTML에 Thymeleaf 자원 경로를 준비했습니다. 현재 미리보기는 Spring Boot나 Thymeleaf 엔진을 실행하지 않습니다.
+
+JDK 8 이상에서 `java`, `javac`가 PATH에 등록되어 있다면 저장소 루트에서 실행합니다.
+
+```powershell
+.\preview.cmd
+```
+
+브라우저에서 [로컬 화면](http://127.0.0.1:8080/)을 확인합니다. 종료는 실행한 터미널에서 `Ctrl+C`입니다. 서버가 이미 실행 중이면 주소만 열면 됩니다.
+
+| 구분 | 시연 이메일 | 시연 비밀번호 |
+| --- | --- | --- |
+| 학생 | demo@campusrent.example | Campus123! |
+| 다른 학생 | other@campusrent.example | Campus123! |
+| 관리자 | admin@campusrent.example | CampusAdmin123! |
+
+학생으로 로그인해 신청한 뒤 로그아웃하고 관리자 계정으로 로그인하면 [관리자 화면](http://127.0.0.1:8080/admin)에서 승인·출고·반납을 시연할 수 있습니다. 로그인 직후 자동 신청하지 않으며, 최종 확인 창에서 별도 제출합니다.
+
+선택 목록은 `sessionStorage`, 신청·반납 검수 기록은 `IndexedDB`에 보존됩니다. 로그인과 새로 가입한 시연 계정은 새로고침 시 초기화됩니다. 실제 학교 계정, 서버 인증·권한, Oracle 저장, 배포는 후속 작업입니다. 자세한 구현 범위와 검증 방법은 [화면 구현 안내](docs/ui/README.md)를 참고하세요.
