@@ -1,4 +1,6 @@
 -- Full development-fixture verification. Use install_dev.sql; SQL errors must stop the script.
+-- Original ERD baseline only (26/185/17). After migration 10, use 11 for incremental checks.
+-- Do not run this fixture smoke script as a read-only production inventory.
 -- Smoke tests roll back their rows; sequence increments are intentionally not rolled back by Oracle.
 DECLARE
   V_COUNT NUMBER;

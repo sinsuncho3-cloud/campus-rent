@@ -1,0 +1,60 @@
+(async()=>{
+  const outcomes=[];
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  const check=(condition,label)=>{if(!condition)throw new Error(label);outcomes.push('PASS '+label);};
+  const until=async(fn,label)=>{for(let i=0;i<200;i++){if(fn())return;await sleep(100);}throw new Error('Timed out: '+label+' '+(document.querySelector('#dialog-error')?.textContent||''));};
+  const click=selector=>{const el=document.querySelector(selector);if(!el)throw new Error('Missing '+selector);el.click();};
+  const fill=(selector,value)=>{const el=document.querySelector(selector);el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));};
+  const api=async(path,body)=>{
+    const session=await fetch('/api/session').then(r=>r.json());
+    const response=await fetch('/api'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':session.csrf},body:body===undefined?undefined:JSON.stringify(body)});
+    const data=await response.json();if(!response.ok)throw new Error(data.message);return data;
+  };
+  const navigate=path=>{history.pushState({},'',path);dispatchEvent(new PopStateEvent('popstate'));};
+  const logout=async()=>{click('[data-action="logout"]');await until(()=>document.querySelector('[data-action="login"]'),'logout');};
+  const login=async(admin=false)=>{
+    click('[data-action="login"]');fill('[name="email"]',admin?'admin@campusrent.example':'demo@campusrent.example');fill('[name="password"]',admin?'CampusAdmin123!':'Campus123!');document.querySelector('[data-form="auth"]').requestSubmit();
+    await until(()=>!document.querySelector('#modal').open,'login');await until(()=>document.querySelector('[data-action="logout"]'),'signed in');
+  };
+  const transition=async(id,target)=>{
+    click(`[data-action="transition"][data-id="${id}"][data-target="${target}"]`);
+    const confirmed=document.querySelector('[name="confirmed"]');if(confirmed)confirmed.checked=true;
+    document.querySelector('[data-form="transition"]').requestSubmit();
+    await until(()=>!document.querySelector('#modal').open,target);
+    await until(()=>document.querySelector(`[data-id="${id}"]`)||document.querySelector('.record'),target+' refresh');
+  };
+  await until(()=>document.querySelector('header nav'),'app startup');
+  const catalog=await api('/catalog');check(catalog.length>=12,'Oracle catalog resources');
+  check(document.querySelector('h1').textContent.includes('하고 싶은'),'home rendered');
+  await document.fonts.ready;
+  await Promise.all([...document.images].map(img=>img.complete?Promise.resolve():new Promise(r=>{img.onload=r;img.onerror=r;})));
+  check([...document.images].every(img=>img.complete&&img.naturalWidth),'home assets load');
+  const csrfDenied=await fetch('/api/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});check(csrfDenied.status===403,'CSRF blocks missing token');
+  navigate('/equipment');
+  const d=new Date(Date.now()+7*86400000),day=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  fill('[data-form="conditions"] [name="start"]',day+'T10:00');fill('[data-form="conditions"] [name="end"]',day+'T12:00');document.querySelector('[data-form="conditions"]').requestSubmit();
+  await until(()=>document.querySelector('[data-action="add"][data-id="E2"]:not(:disabled)'),'available equipment');
+  click('[data-action="add"][data-id="E2"]');click('[data-action="checkout"]');
+  await until(()=>document.querySelector('[data-form="auth"]'),'login gate');
+  fill('[name="email"]','demo@campusrent.example');fill('[name="password"]','Campus123!');document.querySelector('[data-form="auth"]').requestSubmit();
+  await until(()=>!document.querySelector('#modal').open,'student login');
+  click('[data-action="checkout"]');document.querySelector('[name="agree"]').checked=true;document.querySelector('[data-form="checkout"]').requestSubmit();
+  await until(()=>location.pathname==='/records'&&document.querySelector('.record'),'request submitted');
+  const own=await api('/state');const record=own.records.filter(r=>r.resourceId==='E2'&&r.status==='승인 대기').pop();check(!!record,'request committed through UI');
+  const frame=document.createElement('iframe');frame.style.cssText='width:390px;height:900px;border:0';document.body.append(frame);frame.src='/records';await new Promise(r=>frame.onload=r);
+  await until(()=>frame.contentDocument.querySelector('.record'),'new page loads persisted request');check(frame.contentDocument.body.textContent.includes(record.id.slice(0,8)),'request survives new document/session reload');frame.remove();
+  await logout();await login(true);navigate('/admin');
+  await transition(record.id,'승인');check((await api('/state')).records.find(r=>r.id===record.id).status==='승인','admin approval stored');
+  await until(()=>document.querySelector(`[data-target="출고"][data-id="${record.id}"]`),'checkout action');await transition(record.id,'출고');
+  check((await api('/state')).records.find(r=>r.id===record.id).checkout.length===4,'checkout snapshot persisted');
+  await logout();await login();navigate('/records');await transition(record.id,'반납 요청');
+  await logout();await login(true);navigate('/admin');await until(()=>document.querySelector(`[data-action="inspection"][data-id="${record.id}"]`),'return inspection');
+  click(`[data-action="inspection"][data-id="${record.id}"]`);const complete=document.querySelector('[data-form="inspection"] [value="반납 완료"]');complete.click();
+  await until(()=>!document.querySelector('#modal').open,'return complete');
+  check((await api('/state')).records.find(r=>r.id===record.id).status==='반납 완료','full browser checkout-return lifecycle persisted');
+  await logout();
+  const publicState=await api('/state');check(publicState.records.length===0,'anonymous state hides private records');
+  navigate('/equipment?q=does-not-exist');check(document.querySelector('.cards').textContent.includes('검색 결과가 없습니다'),'empty result state');
+  navigate('/');
+  return {text:'PASS '+outcomes.length+' backend/browser checks\n'+outcomes.join('\n'),status:'pass',recordId:record.id};
+})()

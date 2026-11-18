@@ -3,7 +3,7 @@
 ## 현재 선택
 
 - Java/Javac `1.8.0_151`을 유지합니다. 이번 JDBC 연결 확인에는 Java 버전 변경이 필요하지 않습니다.
-- Spring Boot·Maven·Gradle은 아직 구성하지 않습니다. 기존 Java 실행 방식에 맞춘 독립 JDBC 테스트 도구를 추가했습니다. 화면 API·인증을 Oracle로 전환하는 작업은 별도입니다.
+- 이 문서는 독립 JDBC 접속 검사 도구의 사용법입니다. 현재 실제 화면은 별도로 구성한 Spring Boot 2.7.18·Maven·Oracle API를 사용합니다. 실행은 `run-server.cmd`, 자세한 내용은 `docs/backend.md`를 참고하세요.
 - 드라이버: Oracle 배포 `com.oracle.database.jdbc:ojdbc6:11.2.0.4`. Oracle 문서상 이 버전의 ojdbc6는 Java 8을 지원합니다. 파일명의 6이 Java 8 사용 불가를 의미하지 않습니다. 실제 서버와의 인증 호환성은 접속 시험으로 확인해야 합니다.
 - 연결 방식: JDBC Thin / SID. URL은 `jdbc:oracle:thin:@203.247.53.176:80:xe`입니다. 포트 80을 그대로 사용하며 HTTP URL이나 서비스명 방식으로 변경하지 않습니다.
 
@@ -55,6 +55,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/setup-oracle-jdbc.ps1
 - 제공 호스트·포트 TCP 연결 성공. Oracle 프로토콜·SID·인증 성공을 의미하지 않습니다.
 - 최초 인증 시험은 `ORA-01017`로 실패했으나 사용자가 로컬 설정을 수정한 뒤 재시험에 성공했습니다. `SELECT 1 FROM DUAL`이 `1`을 반환했습니다.
 - 2026-11-16 사용자 요청에 따라 테이블 26개·시퀀스 17개와 관련 인덱스 생성을 완료했습니다. 컬럼 185개, PK 26개·FK 44개, 전체 인덱스 72개를 확인했습니다. 무효 인덱스·비활성 또는 미검증 제약조건은 없습니다.
-- 초기 데이터는 0건이며, 승인 프로시저는 아직 생성하지 않았습니다. 상세 경과는 `docs/worklogs/2026-11-16-session.md`에 기록했습니다.
+- 이후 초기 계정·장비·시설 데이터와 실제 화면 저장 API를 연결했습니다. 승인 프로시저는 설치하지 않고 Java 서비스에서 처리합니다. 상세 검증 결과는 `docs/backend.md`에 기록했습니다.
 
 참고: [Oracle JDBC·JDK 호환성](https://www.oracle.com/database/technologies/faq-jdbc.html), [Oracle의 Maven Central 배포 안내](https://blogs.oracle.com/developers/oracle-database-client-libraries-for-java-now-on-maven-central), [Oracle SID URL 예시](https://github.com/oracle-samples/oracle-db-examples/blob/main/java/jdbc/BasicSamples/JDBCUrlSample.java).

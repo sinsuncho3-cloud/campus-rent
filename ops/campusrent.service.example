@@ -1,0 +1,22 @@
+# Linux example; review paths, Java runtime and service account on the actual host.
+[Unit]
+Description=CampusRent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=campusrent
+Group=campusrent
+WorkingDirectory=/opt/campusrent/current
+ExecStart=/usr/bin/java -Duser.timezone=Asia/Seoul -jar /opt/campusrent/current/campus-rent-0.1.0.jar --spring.config.additional-location=file:/etc/campusrent/application-runtime.properties
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

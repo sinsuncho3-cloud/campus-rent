@@ -1,4 +1,4 @@
-param([int]$Port = 8080)
+param([int]$Port = 8080,[switch]$Management,[switch]$Inspection,[switch]$Operations,[switch]$Recommendations)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $chrome = Join-Path $env:ProgramFiles 'Google/Chrome/Application/chrome.exe'
@@ -40,25 +40,33 @@ try {
   if (-not $pages) { throw 'Chrome debugging endpoint did not start.' }
   $page = $pages | Where-Object type -eq 'page' | Select-Object -First 1
   $socket.ConnectAsync([uri]$page.webSocketDebuggerUrl,[Threading.CancellationToken]::None).GetAwaiter().GetResult() | Out-Null
-  Invoke-Cdp 'Page.navigate' @{url="http://127.0.0.1:$Port/__checks"} | Out-Null
+  Invoke-Cdp 'Page.navigate' @{url="http://127.0.0.1:$Port/"} | Out-Null
+  Start-Sleep -Milliseconds 1000
+  $scriptFile=if($Recommendations){'tools/recommendation-browser-check.js'}elseif($Operations){'tools/operations-browser-check.js'}elseif($Inspection){'tools/inspection-browser-check.js'}elseif($Management){'tools/admin-browser-check.js'}else{'tools/backend-browser-check.js'}
+  $checkScript=[IO.File]::ReadAllText((Join-Path $projectRoot $scriptFile))
+  $expression='window.__backendResult={status:"running",text:"RUNNING"};'+$checkScript+'.then(r=>window.__backendResult=r).catch(e=>window.__backendResult={status:"fail",text:String(e.stack)});'
+  Invoke-Cdp 'Runtime.evaluate' @{expression=$expression} | Out-Null
   $status = ''
-  for ($attempt=0; $attempt -lt 180; $attempt++) {
+  for ($attempt=0; $attempt -lt 480; $attempt++) {
     Start-Sleep -Milliseconds 250
-    $evaluation = Invoke-Cdp 'Runtime.evaluate' @{expression="JSON.stringify({status:document.documentElement.dataset.result,text:document.querySelector('#result')?.textContent})";returnByValue=$true}
+    $evaluation = Invoke-Cdp 'Runtime.evaluate' @{expression="JSON.stringify(window.__backendResult)";returnByValue=$true}
     if ($evaluation.result.value) {
       $status = $evaluation.result.value | ConvertFrom-Json
       if ($status.status -in @('pass','fail')) { break }
     }
   }
-  $status.text | Set-Content -LiteralPath (Join-Path $projectRoot '.work/browser-check-result.txt') -Encoding UTF8
+  $resultFile=if($Recommendations){'.work/recommendation-browser-check-result.txt'}elseif($Operations){'.work/operations-browser-check-result.txt'}elseif($Inspection){'.work/inspection-browser-check-result.txt'}elseif($Management){'.work/admin-browser-check-result.txt'}else{'.work/browser-check-result.txt'}
+  $status.text | Set-Content -LiteralPath (Join-Path $projectRoot $resultFile) -Encoding UTF8
   Write-Output $status.text
   if ($status.status -ne 'pass') { throw 'Browser checks did not pass.' }
   foreach ($size in @(@{width=1440;height=1100;name='desktop'},@{width=390;height=1000;name='mobile'})) {
     Invoke-Cdp 'Emulation.setDeviceMetricsOverride' @{width=$size.width;height=$size.height;deviceScaleFactor=1;mobile=$false} | Out-Null
-    Invoke-Cdp 'Page.navigate' @{url="http://127.0.0.1:$Port/"} | Out-Null
+    $shotPath=if($Recommendations){'/purpose?activity=%EC%9C%A0%ED%8A%9C%EB%B8%8C%20%EC%B4%AC%EC%98%81%203%EB%AA%85'}else{'/'}
+    Invoke-Cdp 'Page.navigate' @{url=("http://127.0.0.1:$Port"+$shotPath)} | Out-Null
     Start-Sleep -Milliseconds 1000
     $shot = Invoke-Cdp 'Page.captureScreenshot' @{format='png';captureBeyondViewport=$true}
-    [IO.File]::WriteAllBytes((Join-Path $projectRoot ('.work/home-'+$size.name+'.png')),[Convert]::FromBase64String($shot.data))
+    $shotName=if($Recommendations){'recommendation'}else{'home'}
+    [IO.File]::WriteAllBytes((Join-Path $projectRoot ('.work/'+$shotName+'-'+$size.name+'.png')),[Convert]::FromBase64String($shot.data))
   }
 } finally {
   if ($socket.State -eq [Net.WebSockets.WebSocketState]::Open) { try { Invoke-Cdp 'Browser.close' @{} | Out-Null } catch {} }

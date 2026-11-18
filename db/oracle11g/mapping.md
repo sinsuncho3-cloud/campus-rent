@@ -1,6 +1,8 @@
 # ERD·화면·DB 매핑
 
-기준: `docs/erd/[New-Era] CampusRent_ERD_20261020.pdf`의 물리 ERD(2쪽), `src/main/resources/static/js/data.js`, `app.js`, `store.js`. ERD의 **26개 테이블·185개 컬럼과 자료형·NULL 허용 여부를 유지**했습니다. 테이블·컬럼을 추가하거나 이름을 바꾸지 않았습니다.
+2026-11-18 추천 확장: USE_PURPOSE는 기존 목적 4개와 신규 목적 3개를 함께 사용하고 PURPOSE_KEYWORD·PURPOSE_EQUIPMENT_RULE을 추천 API가 읽습니다. 새 목적의 FACILITY_PURPOSE는 코드로 지정한 원래 시연 시설에만 추가했습니다. 추천 키워드 관리 화면은 PURPOSE_KEYWORD의 추가·수정·해제를 저장합니다. 기존 신청과 목적 ID·테이블·시퀀스 이름은 유지하며 신규 객체는 없습니다. 12번 SQL 및 [추천 안내](../../docs/recommendations.md)를 참고하세요.
+
+기준: `docs/erd/[New-Era] CampusRent_ERD_20261020.pdf`의 물리 ERD(2쪽), `src/main/resources/static/js/data.js`, `app.js`, `store.js`. ERD의 **26개 테이블·185개 컬럼과 자료형·NULL 허용 여부를 유지**했습니다. 이는 원본 구축 기준입니다. 2026-11-18 증분 10번에서 FACILITY_BLOCK 해제 컬럼 4개와 TBL_FACILITY_BLOCK_LOG, SEQ_FACILITY_BLOCK_LOG를 추가했습니다. 기존 이름은 유지합니다. 증분은 ERD 개정 반영 대상이며 11번 SQL로 검증합니다.
 
 ## 화면과 저장 대상
 
@@ -17,7 +19,7 @@
 | 시설 목록·상세 | `FACILITY` | 코드·이름·분류·위치·수용 인원·비치 설비 |
 | 시설 운영 시간 | `FACILITY_HOURS` | ISO 요일(월=1~일=7), HH24:MI 시작·종료 |
 | 시설 허용 용도 | `FACILITY_PURPOSE` | 시설과 이용 목적의 다대다 관계 |
-| 시설 점검·운영 제한 | `FACILITY_BLOCK` | 제한 시작·종료·사유·등록 관리자 |
+| 시설 점검·운영 제한 | `FACILITY_BLOCK`, `TBL_FACILITY_BLOCK_LOG` | 제한 시작·종료·해제 사유·처리자·전후 변경 이력 |
 | 활동 목적·설명 | `USE_PURPOSE` | 인터뷰·발표·회의·과제 영상 4개 목적 |
 | 목적 인식 키워드 | `PURPOSE_KEYWORD` | 포함/제외·일치 방식·우선순위 |
 | 목적별 장비 구성 | `PURPOSE_EQUIPMENT_RULE` | 목적·품목별 필수/선택·추천 이유 |

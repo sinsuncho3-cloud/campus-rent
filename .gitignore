@@ -44,6 +44,7 @@ out/
 /.aws/
 /.codex/
 /src/main/resources/application-local.properties
+/ops/application-runtime.properties
 src/main/resources/application-local.yml
 src/main/resources/application-local.yaml
 

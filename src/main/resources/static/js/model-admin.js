@@ -1,0 +1,27 @@
+import {request} from './store.js';
+let data=null,ui;
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const input=(name,label,value='',extra='')=>`<label class="field">${label}<input name="${name}" value="${esc(value)}" ${extra}></label>`;
+const select=(name,label,options,value)=>`<label class="field">${label}<select name="${name}">${options.map(([id,label])=>`<option value="${id}" ${String(id)===String(value)?'selected':''}>${esc(label)}</option>`).join('')}</select></label>`;
+const button=(kind,label,id='')=>`<button type="button" class="btn secondary small" data-manage="${kind}" data-id="${id}">${label}</button>`;
+export function configureModels(value){ui=value;}
+export async function loadModels(user){data=user?.role==='admin'?await request('/admin/models'):null;}
+export function modelsView(){return `<div class="container page"><h1>품목·모델·사양 관리</h1><p class="note">기존 품목과 모델은 삭제하지 않습니다. 승인·미반납 장비의 모델 변경과 품목 사용 중지를 차단합니다.</p>${button('type','품목 등록')}${button('spec','사양 항목 등록')}${button('model','모델 등록')}${data.types.map(t=>`<section class="panel record" style="margin-top:20px"><h2>${esc(t.TYPE_NAME)}</h2><p>${esc(t.CATEGORY_LABEL)} · ${t.ENABLED_YN==='Y'?'사용 중':'사용 중지'}</p>${button('type','품목 수정',t.TYPE_ID)}<h3>사양 항목</h3>${data.items.filter(s=>s.TYPE_ID===t.TYPE_ID).map(s=>`<p>${esc(s.SPEC_NAME)} (${esc(s.DEFAULT_UNIT)}) ${button('spec','항목 수정',s.SPEC_ITEM_ID)}</p>`).join('')||'<p>등록된 항목이 없습니다.</p>'}<h3>모델</h3>${data.models.filter(m=>m.TYPE_ID===t.TYPE_ID).map(m=>`<article class="cart-item"><h3>${esc(m.MODEL_NAME)}</h3><p>${esc(m.MODEL_CODE)} · ${esc(m.MANUFACTURER)} · ${m.IS_DEMO_YN==='Y'?'가상 자료':'실제 자료'}</p>${data.values.filter(v=>v.MODEL_ID===m.MODEL_ID).map(v=>`<p>${esc(data.items.find(i=>i.SPEC_ITEM_ID===v.SPEC_ITEM_ID)?.SPEC_NAME)}: ${esc(v.SPEC_VALUE||'미확인')} ${esc(v.VALUE_UNIT)} (${v.VERIFY_STATUS==='CONFIRMED'?'확인':'미확인'})</p>`).join('')}${button('model','모델·사양 수정',m.MODEL_ID)}</article>`).join('')||'<p>등록된 모델이 없습니다.</p>'}</section>`).join('')}</div>`;}
+function specRows(type,model){return data.items.filter(s=>s.TYPE_ID===Number(type)).map(s=>{const v=data.values.find(v=>v.MODEL_ID===Number(model)&&v.SPEC_ITEM_ID===s.SPEC_ITEM_ID)||{};return `<div class="panel model-spec" data-id="${s.SPEC_ITEM_ID}"><h3>${esc(s.SPEC_NAME)}</h3>${input('value','사양 값',v.SPEC_VALUE||'','maxlength="300"')}${input('unit','단위',v.VALUE_UNIT||s.DEFAULT_UNIT||'','maxlength="30"')}${select('verify','확인 상태',[['PENDING','미확인'],['CONFIRMED','확인']],v.VERIFY_STATUS||'PENDING')}</div>`;}).join('')||'<p class="note">먼저 이 품목의 사양 항목을 등록해주세요.</p>';}
+export function modelsAction(el){
+  const kind=el.dataset.manage,id=Number(el.dataset.id)||null;if(!['type','spec','model'].includes(kind))return false;
+  const row=(kind==='type'?data.types:kind==='spec'?data.items:data.models).find(r=>r[kind==='type'?'TYPE_ID':kind==='spec'?'SPEC_ITEM_ID':'MODEL_ID']===id)||{};
+  const types=data.types.filter(t=>t.ENABLED_YN==='Y'||t.TYPE_ID===row.TYPE_ID).map(t=>[t.TYPE_ID,t.TYPE_NAME]);let body='';
+  if(kind==='type')body=input('name','품목명',row.TYPE_NAME||'','required maxlength="50"')+input('category','분류',row.CATEGORY_LABEL||'','required maxlength="50"')+`<label class="checkrow"><input name="enabled" type="checkbox" ${row.ENABLED_YN!=='N'?'checked':''}>사용</label>`;
+  if(kind==='spec')body=select('typeId','품목',types,row.TYPE_ID)+input('name','사양 항목명',row.SPEC_NAME||'','required maxlength="100"')+input('unit','기본 단위',row.DEFAULT_UNIT||'','maxlength="30"')+input('order','표시 순서',row.DISPLAY_ORDER||1,'type="number" required min="1" max="999"');
+  if(kind==='model')body=select('typeId','품목',types,row.TYPE_ID)+input('code','모델 코드',row.MODEL_CODE||'','required maxlength="30"')+input('name','모델명',row.MODEL_NAME||'','required maxlength="100"')+input('manufacturer','제조사',row.MANUFACTURER||'','maxlength="100"')+`<label class="checkrow"><input name="demo" type="checkbox" ${row.IS_DEMO_YN!=='N'?'checked':''}>가상 자료</label><div id="model-specs">${specRows(row.TYPE_ID||types[0]?.[0],id)}</div>`;
+  ui.dialog('품목·모델·사양 '+(id?'수정':'등록'),`<form data-form="manage-${kind}" data-id="${id||''}" data-revision="${row.REVISION||''}">${body}<div class="actions"><button class="btn">저장</button></div></form>`);
+  const type=document.querySelector('#modal [name="typeId"]');if(type){if(id)type.disabled=true;else if(kind==='model')type.onchange=()=>{document.querySelector('#model-specs').innerHTML=specRows(type.value,null);};}return true;
+}
+export async function modelsSubmit(form){
+  const kind=form.dataset.form.replace('manage-','');if(!['type','spec','model'].includes(kind))return false;
+  const f=Object.fromEntries(new FormData(form)),id=form.dataset.id;
+  const payload={...f,revision:form.dataset.revision,typeId:Number(form.querySelector('[name="typeId"]')?.value),order:Number(f.order),enabled:!!form.querySelector('[name="enabled"]')?.checked,demo:!!form.querySelector('[name="demo"]')?.checked};
+  if(kind==='model')payload.specs=[...form.querySelectorAll('.model-spec')].map(r=>({itemId:Number(r.dataset.id),value:r.querySelector('[name="value"]').value,unit:r.querySelector('[name="unit"]').value,status:r.querySelector('[name="verify"]').value}));
+  await request('/admin/'+({type:'types',spec:'spec-items',model:'models'}[kind])+(id?'/'+id:''),payload);await ui.refresh();document.querySelector('#modal').close();ui.notify('저장했습니다.');return true;
+}

@@ -1,6 +1,6 @@
 # CampusRent · Oracle 11g XE 구축 SQL
 
-ERD와 현재 화면을 매핑해 작성한 **개발 환경용 SQL**입니다. 2026-11-16 사용자 요청에 따라 `01_tables.sql`·`02_sequences.sql`·`03_indexes.sql` 범위를 실행해 테이블 26개·컬럼 185개·시퀀스 17개와 관련 인덱스를 생성·검증했습니다. **초기 데이터는 0건이며 승인 프로시저·초기 데이터 SQL·전체 설치 파일은 실행하지 않았습니다.** 연결 시험과 최신 상태는 [connection.md](connection.md)에 기록했습니다.
+ERD와 현재 화면을 매핑해 작성한 **개발 환경용 SQL**입니다. 2026-11-16 사용자 요청에 따라 `01_tables.sql`·`02_sequences.sql`·`03_indexes.sql` 범위를 실행해 테이블 26개·컬럼 185개·시퀀스 17개와 관련 인덱스를 생성·검증했습니다. 이후 화면의 실제 DB 저장 구현을 위해 초기 계정 3개·장비 7개·시설 5개 등을 입력하고 Spring Boot에 연결했습니다. 승인 프로시저·전체 설치 파일은 실행하지 않았으며 업무 검증은 Java 트랜잭션에서 수행합니다. 연결 시험과 최신 상태는 [connection.md](connection.md)에 기록했습니다.
 
 현재 스키마에는 생성된 객체가 있으므로 빈 스키마 전용 `install_dev.sql`을 재실행하지 마세요. 후속 작업은 승인된 미실행 단계만 별도로 수행해야 합니다.
 
@@ -52,7 +52,7 @@ boolean authenticated = encoder.matches(rawPassword, user.getPassword());
 
 위 코드는 별도 클래스의 import·빈 설정이 필요한 연동 예시입니다. 일반 가입에서도 `encoder.encode(rawPassword)` 결과만 저장하고 사용자 입력으로 관리자 역할을 받지 마세요. `07_queries.sql`의 로그인 SELECT에는 해시가 포함되지만, 이를 브라우저 응답에 노출하면 안 됩니다.
 
-**현재 화면은 여전히 IndexedDB·브라우저 메모리를 사용합니다.** SQL을 실행해도 화면이 자동으로 Oracle 인증을 사용하지 않습니다. 서버 세션·로그인 API·조회/신청 API와 화면 연결은 다음 단계입니다.
+**현재 화면은 Spring Boot API를 통해 Oracle을 조회·저장합니다.** 선택 목록만 sessionStorage에 남고 로그인은 서버 세션을 사용합니다. 실행과 실제 연동 검증은 [백엔드 안내](../../docs/backend.md)를 참고하세요.
 
 ## 외부 DB에서 실행할 때
 
@@ -91,3 +91,10 @@ JDK의 `java`·`javac`가 필요합니다. ERD 테이블·컬럼명 일치(26개
 승인만 실행 가능한 프로시저를 제공하며, 전체 출고·반납·시설 이용 서비스까지 구현한 것은 아닙니다. `07_queries.sql`의 다른 변경 쿼리는 행 수·권한·상태·트랜잭션 검사를 수행하는 서비스 안에서 사용해야 합니다. 자세한 보완 규칙은 `mapping.md`에 정리했습니다.
 
 참고: [Oracle 11g CREATE SEQUENCE](https://docs.oracle.com/html/E10592_02/statements_6015.htm), [Spring Security 비밀번호 저장](https://docs.spring.io/spring-security/reference/features/authentication/password-storage.html), [Pbkdf2PasswordEncoder 5.8 API](https://docs.spring.io/spring-security/site/docs/5.8.16/api/org/springframework/security/crypto/password/Pbkdf2PasswordEncoder.html).
+# 2026-11-18 증분 변경
+
+추천 확장은 `recommendation-seed.json` → `tools/generate-recommendation-sql.ps1` → `12_recommendations.sql`로 관리합니다. 12번은 기존 테이블에 목적·키워드·장비 규칙을 추가하고 지정된 원래 시연 시설에만 새 목적을 연결하는 DML입니다. 현재 팀 DB에는 트랜잭션으로 적용했으며 DDL·삭제·기존 설치 재실행은 하지 않았습니다. 실제 시설 권한은 자동 확대하지 않습니다. 관리자 편집 이후에는 초기 사전을 다시 주입하는 것이 적절한지 먼저 검토합니다. 상세는 [추천 안내](../../docs/recommendations.md)를 참고하세요.
+
+`01`~`09`와 `install_dev.sql`은 원본 ERD 기준입니다. 기존 운영 스키마에 재실행하지 않습니다. `10_block_audit.sql`은 시설 제한 해제 컬럼 4개와 `TBL_FACILITY_BLOCK_LOG`, `SEQ_FACILITY_BLOCK_LOG`, 관련 제약·인덱스 및 기존 제한의 IMPORT 기준 이력을 추가하는 **1회 적용용** 증분입니다. 현재 팀 DB에는 적용했습니다. 기존 테이블·SQ_ 시퀀스 이름은 변경하지 않았습니다.
+
+새 빈 스키마는 기존 구축 절차로 기본 스키마·초기 데이터를 준비한 후 10번을 한 번 적용하고 최신 앱을 시작합니다. `09_verify.sql`은 원본 26개 테이블·185개 컬럼·17개 시퀀스 기준이므로 확장 이후의 총 개수 판정용으로 사용하지 않습니다. 증분은 읽기 전용 `11_verify_block_audit.sql`로 확인합니다. 10번과 11번은 `install_dev.sql`에서 자동 실행하지 않습니다. `08_approve.sql`은 기본 ERD용 참고 프로시저이며 현재 서비스는 Java 트랜잭션으로 승인합니다.
